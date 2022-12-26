@@ -110,4 +110,20 @@ router.get("/current", authorize, async (req, res, next) => {
   }
 });
 
+router.patch("/users", authorize, async (req, res, next) => {
+  try {
+    const { _id } = req.user;
+    const { subscription } = req.body;
+    const subscriptionTypes = ["starter", "pro", "business"];
+    const isValid = subscriptionTypes.some((sub) => sub === subscription);
+    if (!isValid) throw createError(400, "Subscribe type is wrong");
+
+    const { email } = await User.findByIdAndUpdate({ _id }, { subscription });
+
+    return res.status(200).json({ email, subscription });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

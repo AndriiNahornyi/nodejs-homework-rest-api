@@ -31,11 +31,20 @@ const updateFavoriteSchema = Joi.object({
 router.get("/", authorize, async (req, res, next) => {
   try {
     const { _id: owner } = req.user;
+    const { page, limit, favorite } = req.query;
+    const queryOptions = { skip: 0, limit: 20 };
+    +limit < 1 ? (queryOptions.limit = 1) : (queryOptions.limit = +limit);
+    page < 1
+      ? (queryOptions.skip = 0)
+      : (queryOptions.skip = (+page - 1) * queryOptions.limit);
 
-    const result = await Contact.find({ owner }, "name email phone").populate(
-      "owner",
-      "name email"
-    );
+    const filter = { owner };
+    if (favorite !== undefined) filter.favorite = favorite;
+    const result = await Contact.find(
+      filter,
+      "name email phone favorite",
+      queryOptions
+    ).populate("owner", "name email");
     res.json(result);
   } catch (error) {
     next(error);
