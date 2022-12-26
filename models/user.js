@@ -1,0 +1,30 @@
+const { Schema, model } = require("mongoose");
+
+const userSchema = Schema(
+  {
+    password: {
+      type: String,
+      minlength: 6,
+      required: [true, "Set password for user"],
+    },
+    email: {
+      type: String,
+      // eslint-disable-next-line no-useless-escape
+      match: /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+      unique: true,
+      required: [true, "Email is required"],
+    },
+    subscription: {
+      type: String,
+      enum: ["starter", "pro", "business"],
+      default: "starter",
+    },
+    token: String,
+    default: "",
+  },
+  { versionKey: false, timestamps: true }
+);
+
+const User = model("user", userSchema);
+
+module.exports = User;
