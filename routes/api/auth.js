@@ -2,11 +2,14 @@ const express = require("express");
 const Joi = require("joi");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const path = require("path");
+const fs = require("fs/promises");
 
 const { createError, createHashPassword } = require("../../helpers");
 
 const User = require("../../models/user");
-const { authorize } = require("../../middlewares");
+const { authorize, upload } = require("../../middlewares");
 
 const registerUserSchema = Joi.object({
   password: Joi.string().min(6).required(),
@@ -42,7 +45,13 @@ router.post("/signup", async (req, res, next) => {
     }
 
     const hashPassword = await createHashPassword(password);
-    const newUser = await User.create({ email, password: hashPassword });
+    const avatarURL = gravatar.url(email);
+
+    const newUser = await User.create({
+      email,
+      password: hashPassword,
+      avatarURL,
+    });
     res.status(201).json({
       user: {
         email: newUser.email,
@@ -125,5 +134,33 @@ router.patch("/users", authorize, async (req, res, next) => {
     next(error);
   }
 });
+
+router.patch(
+  "/avatars",
+  authorize,
+  upload.single("avatar"),
+  async (req, res, next) => {
+    try {
+      const { _id } = req.user;
+      const { path: tempDir, originalname } = req.file;
+      const [extension] = originalname.split(".").reverse();
+      const newName = `${_id}.${extension}`;
+      const uploadDir = path.join(
+        __dirname,
+        "../../",
+        "public",
+        "avatars",
+        newName
+      );
+      await fs.rename(tempDir, uploadDir);
+      const avatarURL = path.join("avatars", newName);
+      await User.findByIdAndUpdate(_id, { avatarURL });
+      res.status(201).json(avatarURL);
+    } catch (error) {
+      await fs.unlink(req.file.path);
+      next(error);
+    }
+  }
+);
 
 module.exports = router;
