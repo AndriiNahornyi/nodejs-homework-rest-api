@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const gravatar = require("gravatar");
 const path = require("path");
 const fs = require("fs/promises");
+const Jimp = require("jimp");
 
 const { createError, createHashPassword } = require("../../helpers");
 
@@ -152,6 +153,10 @@ router.patch(
         "avatars",
         newName
       );
+
+      const image = await Jimp.read(tempDir);
+      await image.resize(250, 250).write(tempDir);
+
       await fs.rename(tempDir, uploadDir);
       const avatarURL = path.join("avatars", newName);
       await User.findByIdAndUpdate(_id, { avatarURL });
