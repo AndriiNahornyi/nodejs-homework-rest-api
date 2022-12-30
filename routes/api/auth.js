@@ -73,23 +73,28 @@ router.post("/signin", async (req, res, next) => {
 
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) {
+    const newUser = await User.findOne({ email });
+    if (!newUser) {
       throw createError(401, "Credentials are wrong");
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, newUser.password);
     if (!isValidPassword) {
       throw createError(401, "Credentials are wrong");
     }
-    const payload = { id: user.id };
+    const payload = { id: newUser.id };
 
     const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "1h" });
 
-    await User.findByIdAndUpdate({ _id: user._id }, { token });
+    await User.findByIdAndUpdate({ _id: newUser._id }, { token });
 
     res.json({
       token,
+      user: {
+        email: newUser.email,
+        subscription: newUser.subscription,
+        avatarURL: newUser.avatarURL,
+      },
     });
   } catch (error) {
     next(error);
@@ -136,36 +141,33 @@ router.patch("/users", authorize, async (req, res, next) => {
   }
 });
 
-router.patch(
-  "/avatars",
-  authorize,
-  upload.single("avatar"),
-  async (req, res, next) => {
-    try {
-      const { _id } = req.user;
-      const { path: tempDir, originalname } = req.file;
-      const [extension] = originalname.split(".").reverse();
-      const newName = `${_id}.${extension}`;
-      const uploadDir = path.join(
-        __dirname,
-        "../../",
-        "public",
-        "avatars",
-        newName
-      );
+router.patch("/avatars", authorize, upload, async (req, res, next) => {
+  try {
+    const { _id } = req.user;
+    const { path: tempDir, originalname } = req.file;
+    const [extension] = originalname.split(".").reverse();
+    const newName = `${_id}.${extension}`;
 
-      const image = await Jimp.read(tempDir);
-      await image.resize(250, 250).write(tempDir);
+    const uploadDir = path.join(
+      __dirname,
+      "../../",
+      "public",
+      "avatars",
+      newName
+    );
 
-      await fs.rename(tempDir, uploadDir);
-      const avatarURL = path.join("avatars", newName);
-      await User.findByIdAndUpdate(_id, { avatarURL });
-      res.status(201).json(avatarURL);
-    } catch (error) {
-      await fs.unlink(req.file.path);
-      next(error);
-    }
+    const image = await Jimp.read(tempDir);
+    await image.resize(250, 250).write(tempDir);
+
+    await fs.rename(tempDir, uploadDir);
+
+    const avatarURL = path.join("/avatars", newName);
+    await User.findByIdAndUpdate(_id, { avatarURL });
+    res.status(201).json(avatarURL);
+  } catch (error) {
+    await fs.unlink(req.file.path);
+    next(error);
   }
-);
+});
 
 module.exports = router;
