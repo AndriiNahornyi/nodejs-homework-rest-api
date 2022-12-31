@@ -2,11 +2,15 @@ const express = require("express");
 const Joi = require("joi");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const path = require("path");
+const fs = require("fs/promises");
+const Jimp = require("jimp");
 
 const { createError, createHashPassword } = require("../../helpers");
 
 const User = require("../../models/user");
-const { authorize } = require("../../middlewares");
+const { authorize, upload } = require("../../middlewares");
 
 const registerUserSchema = Joi.object({
   password: Joi.string().min(6).required(),
@@ -42,7 +46,13 @@ router.post("/signup", async (req, res, next) => {
     }
 
     const hashPassword = await createHashPassword(password);
-    const newUser = await User.create({ email, password: hashPassword });
+    const avatarURL = gravatar.url(email);
+
+    const newUser = await User.create({
+      email,
+      password: hashPassword,
+      avatarURL,
+    });
     res.status(201).json({
       user: {
         email: newUser.email,
@@ -63,23 +73,28 @@ router.post("/signin", async (req, res, next) => {
 
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) {
+    const newUser = await User.findOne({ email });
+    if (!newUser) {
       throw createError(401, "Credentials are wrong");
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, newUser.password);
     if (!isValidPassword) {
       throw createError(401, "Credentials are wrong");
     }
-    const payload = { id: user.id };
+    const payload = { id: newUser.id };
 
     const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "1h" });
 
-    await User.findByIdAndUpdate({ _id: user._id }, { token });
+    await User.findByIdAndUpdate({ _id: newUser._id }, { token });
 
     res.json({
       token,
+      user: {
+        email: newUser.email,
+        subscription: newUser.subscription,
+        avatarURL: newUser.avatarURL,
+      },
     });
   } catch (error) {
     next(error);
@@ -122,6 +137,35 @@ router.patch("/users", authorize, async (req, res, next) => {
 
     return res.status(200).json({ email, subscription });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/avatars", authorize, upload, async (req, res, next) => {
+  try {
+    const { _id } = req.user;
+    const { path: tempDir, originalname } = req.file;
+    const [extension] = originalname.split(".").reverse();
+    const newName = `${_id}.${extension}`;
+
+    const uploadDir = path.join(
+      __dirname,
+      "../../",
+      "public",
+      "avatars",
+      newName
+    );
+
+    const image = await Jimp.read(tempDir);
+    await image.resize(250, 250).write(tempDir);
+
+    await fs.rename(tempDir, uploadDir);
+
+    const avatarURL = path.join("/avatars", newName);
+    await User.findByIdAndUpdate(_id, { avatarURL });
+    res.status(201).json(avatarURL);
+  } catch (error) {
+    await fs.unlink(req.file.path);
     next(error);
   }
 });
