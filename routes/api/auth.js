@@ -9,7 +9,6 @@ const Jimp = require("jimp");
 const { nanoid } = require("nanoid");
 
 const { createError, createHashPassword, sendMail } = require("../../helpers");
-
 const User = require("../../models/user");
 const { authorize, upload } = require("../../middlewares");
 
@@ -139,7 +138,9 @@ router.post("/signin", async (req, res, next) => {
     if (!newUser) {
       throw createError(401, "Credentials are wrong");
     }
-
+    if (!newUser.verify) {
+      throw createError(401, "Please activate your account");
+    }
     const isValidPassword = await bcrypt.compare(password, newUser.password);
     if (!isValidPassword) {
       throw createError(401, "Credentials are wrong");
